@@ -660,9 +660,9 @@ if __name__ == '__main__':
     # divice = sys.argv[5]
 
     model_type = "vit_h"
-    weight_path = "/home/zhengzhimin/segment-anything-main/sam_vit_h_4b8939.pth"
-    input_path0 = r'/home/zhengzhimin/data/big_data/ruijing/x_big/bright-0_0_005_007.bmp'
-    output_dir = r'/home/zhengzhimin/segment-anything-feature/result/bright-0_0_005_007.tif'
+    weight_path = "./sam_vit_h_4b8939.pth"
+    input_path0 = r'./bright-0_0_005_007.bmp'
+    output_dir = r'./bright-0_0_005_007.tif'
     divice = 'cuda'
     predict3(model_type, weight_path, input_path0, output_dir,
              clip_size=1024, clip_crop=128, model_input_size=1024, divice=divice)

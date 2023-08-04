@@ -7,49 +7,11 @@ import cv2
 import torch
 import albumentations as A
 import gdal, osr
-from albumentations.pytorch import ToTensor
 import numpy as np
 from segment_anything.matrix_nms import mask_matrix_nms
-
-class IOUMetric:
-    """
-    Class to calculate mean-iou using fast_hist method
-    """
-
-    def __init__(self, num_classes=10):
-        self.num_classes = num_classes
-        self.hist = np.zeros((num_classes, num_classes))
-
-    def _fast_hist(self, label_pred, label_true):
-        mask = (label_true >= 0) & (label_true < self.num_classes)
-        hist = np.bincount(
-            self.num_classes * label_true[mask].astype(int) +
-            label_pred[mask], minlength=self.num_classes ** 2).reshape(self.num_classes, self.num_classes)
-        return hist
-
-    def add_batch(self, predictions, gts):
-        predictions = np.where(predictions > 0.8, 1, 0)
-        gts = np.where(gts > 0.8, 1, 0)
-        for lp, lt in zip(predictions, gts):
-            self.hist += self._fast_hist(lp.flatten(), lt.flatten())
-
-    def evaluate(self):
-        acc = np.diag(self.hist).sum() / self.hist.sum()
-        acc_cls = np.diag(self.hist) / self.hist.sum(axis=1)
-        acc_cls = np.nanmean(acc_cls)
-        iu = np.diag(self.hist) / (self.hist.sum(axis=1) + self.hist.sum(axis=0) - np.diag(self.hist))
-        print(iu)
-        mean_iu = np.nanmean(iu)
-        freq = self.hist.sum(axis=1) / self.hist.sum()
-        fwavacc = (freq[freq > 0] * iu[freq > 0]).sum()
-        return acc, acc_cls, iu, mean_iu, fwavacc
-
-
-# def eval(pred, target):
-
-
-
 import json
+
+
 class GwEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.integer):
@@ -61,17 +23,6 @@ class GwEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-
-def get_infer_transform():
-    transform = A.Compose([
-        ToTensor(),
-        # A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-        # ToTensorV2(),
-    ])
-    return transform
-
-
-
 def all_path(dir_path):
     file_list = []
     for maindir, subdir, file_name_list in os.walk(dir_path):
@@ -80,23 +31,6 @@ def all_path(dir_path):
                 apath = os.path.join(maindir, filename)
                 file_list.append(apath)
     return file_list
-
-
-def parse_hdr_rpc(dir_hdr, dir_hdr_original):
-    flag = 0
-    with open(dir_hdr_original) as f:
-        rpc = 'rpc info = {\n'
-        for line in f:
-            line.replace('\n', '')
-            if 'fwhm' in line:
-                flag = 0
-            if flag:
-                rpc += line
-            if 'rpc info = {' in line:
-                flag = 1
-    rpc_list = rpc.strip('\n').strip('}')
-    f = open(dir_hdr, 'a')
-    f.writelines(rpc_list)
 
 
 def static_img(input_path):
@@ -144,7 +78,7 @@ def write(input_path1):
     target.WriteRaster(0, 0, 10000, 10000, data.tostring())
 
 
-def clip_img2(input_path1, input_path2, clip_size, clip_crop):
+def clip_img(input_path1, input_path2, clip_size, clip_crop):
     img_raster1 = gdal.Open(input_path1, gdal.GA_ReadOnly)
     img_raster2 = gdal.Open(input_path2, gdal.GA_ReadOnly)
     ref_transform1 = img_raster1.GetGeoTransform()
@@ -156,7 +90,6 @@ def clip_img2(input_path1, input_path2, clip_size, clip_crop):
     im_width2 = img_raster2.RasterXSize  # 栅格矩阵的列数
     im_height2 = img_raster2.RasterYSize  # 栅格矩阵的行数
 
-    # 规则分块,这里clip_size是真正输出的大小，true_clip_size是裁切分块的大小
     true_clip_size = clip_size - 1 * clip_crop
     if im_height % true_clip_size > clip_crop:
         row_num = int(im_height / true_clip_size) + 1
@@ -995,7 +928,7 @@ def predict_fast_gpu_everything(predictor, divice="cuda:0"):
 
 import time
 from datetime import datetime
-def predict3(model_type, weight_path, input_path0, input_path1, output_path, clip_size, clip_crop, batch_size=1,
+def predict(model_type, weight_path, input_path0, input_path1, output_path, clip_size, clip_crop, batch_size=1,
              model_input_size=512, img_ratios=[0.5, 1.0, 2.0], divice='cuda:0'):
     begin_process = time.time()
     if divice == 'cpu':
@@ -1018,7 +951,7 @@ def predict3(model_type, weight_path, input_path0, input_path1, output_path, cli
     now_index = 1
     for input_path in zip(input_list1, input_list2):
         image_embeddings_dict = {}
-        pre_generator = clip_img2(input_path[0], input_path[1], clip_size=clip_size, clip_crop=clip_crop)
+        pre_generator = clip_img(input_path[0], input_path[1], clip_size=clip_size, clip_crop=clip_crop)
 
         img_raster1 = gdal.Open(input_path[0], gdal.GA_ReadOnly)
         im_width = img_raster1.RasterXSize  # 栅格矩阵的列数
@@ -1134,10 +1067,10 @@ if __name__ == '__main__':
 
     model_type = "vit_h"
     weight_path = "sam_vit_h_4b8939.pth"
-    input_path0 = r'/home/zhengzhimin/segment-anything-main/test_data/14-2012-0420-6900-LA93-0M50-E080.tif'
-    input_path1 = r'/home/zhengzhimin/segment-anything-main/test_data/14-2012-0420-6900-LA93-0M50-E080_result0313.tif'
-    output_dir = r'/home/zhengzhimin/segment-anything-main/result/14-2012-0420-6900-LA93-0M50-E080_ssam_result.tif'
+    input_path0 = r'./14-2012-0420-6900-LA93-0M50-E080.tif'
+    input_path1 = r'./14-2012-0420-6900-LA93-0M50-E080_result0313.tif'
+    output_dir = r'./result/14-2012-0420-6900-LA93-0M50-E080_ssam_result.tif'
     divice = 'cuda'
-    predict3(model_type, weight_path, input_path0, input_path1, output_dir,
+    predict(model_type, weight_path, input_path0, input_path1, output_dir,
              clip_size=1024, clip_crop=128, model_input_size=1024, divice=divice)
 

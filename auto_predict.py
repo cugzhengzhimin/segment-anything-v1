@@ -355,9 +355,9 @@ def main(image_path, lable_path, weight_path="sam_vit_h_4b8939.pth", model_type=
         print('sam everything')
         result = predict_fast_gpu_everything(predictor)
 
-    cv2.imwrite(r'./1_2.tif', 255 * result.astype(np.uint8))
+    cv2.imwrite(r'./1.tif', 255 * result.astype(np.uint8))
 
 if __name__ == '__main__':
-    image_path = r'/home/zhengzhimin/data/sample_tile/mvtec/transistor/DataSummary/Negative/x/012.png'
-    label_path = r'/home/zhengzhimin/data/sample_tile/ruijing/x/bright-0_0_016_009_3.tif'
-    main(image_path, label_path, weight_path='/home/zhengzhimin/segment-anything-main/sam_vit_h_4b8939.pth', model_type='vit_h', task_type=1)
+    image_path = r''
+    label_path = r''
+    main(image_path, label_path, weight_path='./sam_vit_h_4b8939.pth', model_type='vit_h', task_type=1)
